@@ -1,0 +1,9 @@
+.env
+__pycache__/
+*.py[cod]
+*.pyo
+venv/
+.venv/
+app/models/model.pkl
+app/models/model.keras
+data/landmarks.csv
