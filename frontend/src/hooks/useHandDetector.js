@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { HandLandmarker, FilesetResolver } from '@mediapipe/tasks-vision'
 import { classifyHand } from '../classifier'
+import { predictLetter } from '../api/predict'
 
 const WASM_PATH = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm'
 const MODEL_PATH = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task'
+const SEND_INTERVAL_MS = 200
 
 export function useHandDetector(videoRef) {
   const [handDetected, setHandDetected] = useState(false)
@@ -11,6 +13,8 @@ export function useHandDetector(videoRef) {
   const [ready, setReady] = useState(false)
   const landmarkerRef = useRef(null)
   const rafRef = useRef(null)
+  const lastSentAt = useRef(0)
+  const pendingRequest = useRef(false)
 
   useEffect(() => {
     let cancelled = false
@@ -45,7 +49,26 @@ export function useHandDetector(videoRef) {
         const result = landmarker.detectForVideo(video, performance.now())
         const detected = result.landmarks.length > 0
         setHandDetected(detected)
-        setLetter(detected ? classifyHand(result.landmarks[0]) : null)
+
+        if (!detected) {
+          setLetter(null)
+        } else {
+          const now = performance.now()
+          const shouldSend =
+            !pendingRequest.current &&
+            now - lastSentAt.current >= SEND_INTERVAL_MS
+
+          if (shouldSend) {
+            const lm = result.landmarks[0]
+            lastSentAt.current = now
+            pendingRequest.current = true
+
+            predictLetter(lm)
+              .then(data => { setLetter(data.letter) })
+              .catch(() => { setLetter(classifyHand(lm)) })
+              .finally(() => { pendingRequest.current = false })
+          }
+        }
       }
       rafRef.current = requestAnimationFrame(detect)
     }
@@ -55,6 +78,7 @@ export function useHandDetector(videoRef) {
   function stopDetection() {
     if (rafRef.current) cancelAnimationFrame(rafRef.current)
     rafRef.current = null
+    pendingRequest.current = false
     setHandDetected(false)
     setLetter(null)
   }
