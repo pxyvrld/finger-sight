@@ -11,12 +11,11 @@ Each row: label + 63 normalized landmark features (x0,y0,z0,…,x20,y20,z20).
 import argparse
 import csv
 import sys
-import time
+import urllib.request
 from pathlib import Path
 
 import cv2
 import mediapipe as mp
-import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -24,6 +23,11 @@ from app.normalizer import normalize  # noqa: E402
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 CSV_PATH = DATA_DIR / "landmarks.csv"
+MODEL_PATH = Path(__file__).resolve().parent / "hand_landmarker.task"
+MODEL_URL = (
+    "https://storage.googleapis.com/mediapipe-models/"
+    "hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task"
+)
 
 HEADER = ["label"] + [
     f"{axis}{i}" for i in range(21) for axis in ("x", "y", "z")
@@ -33,6 +37,15 @@ BaseOptions = mp.tasks.BaseOptions
 HandLandmarker = mp.tasks.vision.HandLandmarker
 HandLandmarkerOptions = mp.tasks.vision.HandLandmarkerOptions
 VisionRunningMode = mp.tasks.vision.RunningMode
+
+
+def _ensure_model() -> None:
+    """Download the hand landmarker .task model if not present."""
+    if MODEL_PATH.exists():
+        return
+    print(f"Pobieranie modelu MediaPipe do {MODEL_PATH} …")
+    urllib.request.urlretrieve(MODEL_URL, MODEL_PATH)
+    print("Pobieranie zakonczone.")
 
 
 def _write_row(label: str, features: list[float]) -> None:
@@ -64,8 +77,16 @@ def collect(letter: str, n_samples: int, camera_index: int) -> None:
         n_samples: Number of valid samples to collect before exiting.
         camera_index: OpenCV camera device index.
     """
-    mp_hands = mp.solutions.hands
-    mp_drawing = mp.solutions.drawing_utils
+    _ensure_model()
+
+    options = HandLandmarkerOptions(
+        base_options=BaseOptions(model_asset_path=str(MODEL_PATH)),
+        running_mode=VisionRunningMode.IMAGE,
+        num_hands=1,
+        min_hand_detection_confidence=0.7,
+        min_hand_presence_confidence=0.5,
+        min_tracking_confidence=0.5,
+    )
 
     cap = cv2.VideoCapture(camera_index)
     if not cap.isOpened():
@@ -78,31 +99,25 @@ def collect(letter: str, n_samples: int, camera_index: int) -> None:
     print(f"Collecting {n_samples} samples for letter '{letter}'.")
     print("Press SPACE to start / stop.  Press Q to quit.")
 
-    with mp_hands.Hands(
-        static_image_mode=False,
-        max_num_hands=1,
-        min_detection_confidence=0.7,
-        min_tracking_confidence=0.5,
-    ) as hands:
+    with HandLandmarker.create_from_options(options) as landmarker:
         while collected < n_samples:
             ret, frame = cap.read()
             if not ret:
                 break
 
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            result = hands.process(frame_rgb)
+            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame_rgb)
+            result = landmarker.detect(mp_image)
 
-            if result.multi_hand_landmarks:
-                for hand_lm in result.multi_hand_landmarks:
-                    mp_drawing.draw_landmarks(
-                        frame,
-                        hand_lm,
-                        mp_hands.HAND_CONNECTIONS,
-                    )
+            if result.hand_landmarks:
+                for hand_lm in result.hand_landmarks:
+                    h, w = frame.shape[:2]
+                    pts = [(int(lm.x * w), int(lm.y * h)) for lm in hand_lm]
+                    for pt in pts:
+                        cv2.circle(frame, pt, 5, (0, 255, 0), -1)
+
                     if capturing:
-                        raw = [
-                            [lm.x, lm.y, lm.z] for lm in hand_lm.landmark
-                        ]
+                        raw = [[lm.x, lm.y, lm.z] for lm in hand_lm]
                         features = normalize(raw)
                         _write_row(letter, features)
                         collected += 1
@@ -131,7 +146,7 @@ def collect(letter: str, n_samples: int, camera_index: int) -> None:
 
     cap.release()
     cv2.destroyAllWindows()
-    print(f"Done. Collected {collected} samples → {CSV_PATH}")
+    print(f"Done. Collected {collected} samples -> {CSV_PATH}")
 
 
 def main() -> None:

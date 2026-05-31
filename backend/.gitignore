@@ -4,6 +4,7 @@ __pycache__/
 *.pyo
 venv/
 .venv/
-app/models/model.pkl
 app/models/model.keras
 data/landmarks.csv
+train/hand_landmarker.task
+confusion_matrix.png
