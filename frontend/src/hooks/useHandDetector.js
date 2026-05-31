@@ -10,6 +10,7 @@ const SEND_INTERVAL_MS = 200
 export function useHandDetector(videoRef) {
   const [handDetected, setHandDetected] = useState(false)
   const [letter, setLetter] = useState(null)
+  const [confidence, setConfidence] = useState(0)
   const [ready, setReady] = useState(false)
   const landmarkerRef = useRef(null)
   const rafRef = useRef(null)
@@ -52,6 +53,7 @@ export function useHandDetector(videoRef) {
 
         if (!detected) {
           setLetter(null)
+          setConfidence(0)
         } else {
           const now = performance.now()
           const shouldSend =
@@ -64,8 +66,8 @@ export function useHandDetector(videoRef) {
             pendingRequest.current = true
 
             predictLetter(lm)
-              .then(data => { setLetter(data.letter) })
-              .catch(() => { setLetter(classifyHand(lm)) })
+              .then(data => { setLetter(data.letter); setConfidence(data.confidence ?? 0) })
+              .catch(() => { setLetter(classifyHand(lm)); setConfidence(0) })
               .finally(() => { pendingRequest.current = false })
           }
         }
@@ -81,7 +83,8 @@ export function useHandDetector(videoRef) {
     pendingRequest.current = false
     setHandDetected(false)
     setLetter(null)
+    setConfidence(0)
   }
 
-  return { handDetected, letter, ready, startDetection, stopDetection }
+  return { handDetected, letter, confidence, ready, startDetection, stopDetection }
 }

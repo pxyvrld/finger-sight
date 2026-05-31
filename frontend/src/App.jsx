@@ -4,7 +4,7 @@ import { useHandDetector } from './hooks/useHandDetector'
 function App() {
   const videoRef = useRef(null)
   const [history, setHistory] = useState([])
-  const { handDetected, letter, ready, startDetection, stopDetection } = useHandDetector(videoRef)
+  const { handDetected, letter, confidence, ready, startDetection, stopDetection } = useHandDetector(videoRef)
   const timerRef = useRef(null)
 
   // Add letter to history after 1 second of stable gesture
@@ -50,6 +50,13 @@ function App() {
             }}>
               {display}
             </span>
+          </div>
+          <div style={{background:'white', borderRadius:'16px', border:'2px solid #c4b5a5', padding:'12px'}}>
+            <p style={{margin:'0 0 6px 0', color:'#888', fontSize:'13px'}}>Pewność:</p>
+            <div style={{background:'#e8e0d8', borderRadius:'8px', height:'10px', overflow:'hidden'}}>
+              <div style={{width:`${Math.round(confidence * 100)}%`, height:'100%', background: confidence > 0.8 ? '#4a7c59' : confidence > 0.6 ? '#e0a020' : '#c0392b', transition:'width 0.2s'}} />
+            </div>
+            <p style={{margin:'4px 0 0 0', fontSize:'12px', color:'#888', textAlign:'right'}}>{Math.round(confidence * 100)}%</p>
           </div>
           <div style={{background:'white', borderRadius:'16px', border:'2px solid #c4b5a5', padding:'12px'}}>
             <p style={{margin:'0 0 6px 0', color:'#888', fontSize:'13px'}}>Historia:</p>
