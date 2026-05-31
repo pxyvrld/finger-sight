@@ -1,120 +1,69 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import { useRef, useState, useEffect } from 'react'
+import { useHandDetector } from './hooks/useHandDetector'
 
 function App() {
-  const [count, setCount] = useState(0)
+  const videoRef = useRef(null)
+  const [history, setHistory] = useState([])
+  const { handDetected, letter, ready, startDetection, stopDetection } = useHandDetector(videoRef)
+  const timerRef = useRef(null)
+
+  // Add letter to history after 1 second of stable gesture
+  useEffect(() => {
+    if (timerRef.current) clearTimeout(timerRef.current)
+    if (!letter) return
+    timerRef.current = setTimeout(() => {
+      setHistory(h => [...h.slice(-19), letter])
+    }, 1000)
+    return () => clearTimeout(timerRef.current)
+  }, [letter])
+
+  const startCamera = async () => {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true })
+    videoRef.current.srcObject = stream
+    videoRef.current.play()
+    startDetection()
+  }
+
+  const stopCamera = () => {
+    videoRef.current?.srcObject?.getTracks().forEach(t => t.stop())
+    stopDetection()
+  }
+
+  const display = !ready ? '⏳' : !handDetected ? '—' : (letter ?? '?')
+  const isLetter = ready && handDetected && letter
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
+    <div style={{minHeight:'100vh', background:'#f5f0eb', display:'flex', flexDirection:'column', alignItems:'center', padding:'24px', fontFamily:'sans-serif'}}>
+      <h2 style={{color:'#5a4a3a'}}>🖐 FingerSight</h2>
+      <div style={{display:'flex', gap:'20px'}}>
+        <div style={{width:'400px', height:'300px', borderRadius:'16px', overflow:'hidden', background:'#d9cfc7', border:'2px solid #c4b5a5'}}>
+          <video ref={videoRef} style={{width:'100%', height:'100%', objectFit:'cover'}} muted />
         </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
+        <div style={{display:'flex', flexDirection:'column', gap:'12px', width:'140px'}}>
+          <div style={{background:'white', borderRadius:'16px', border:'2px solid #c4b5a5', height:'120px', display:'flex', alignItems:'center', justifyContent:'center', padding:'8px'}}>
+            <span style={{
+              fontSize: display.length === 1 ? '72px' : '28px',
+              fontWeight: 'bold',
+              color: isLetter ? '#4a7c59' : '#8a7a6a',
+              textAlign: 'center',
+              lineHeight: 1,
+            }}>
+              {display}
+            </span>
+          </div>
+          <div style={{background:'white', borderRadius:'16px', border:'2px solid #c4b5a5', padding:'12px'}}>
+            <p style={{margin:'0 0 6px 0', color:'#888', fontSize:'13px'}}>Historia:</p>
+            <p style={{margin:0, fontSize:'14px', wordBreak:'break-all'}}>{history.join(' ') || '—'}</p>
+          </div>
         </div>
-        <button
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+      </div>
+      <div style={{display:'flex', gap:'10px', marginTop:'20px'}}>
+        <button onClick={startCamera} style={{padding:'10px 20px', borderRadius:'20px', border:'2px solid #c4b5a5', background:'white', cursor:'pointer'}}>Start</button>
+        <button onClick={stopCamera} style={{padding:'10px 20px', borderRadius:'20px', border:'2px solid #c4b5a5', background:'white', cursor:'pointer'}}>Stop</button>
+        <button onClick={() => setHistory([])} style={{padding:'10px 20px', borderRadius:'20px', border:'2px solid #c4b5a5', background:'white', cursor:'pointer'}}>Kalibracja</button>
+        <button style={{padding:'10px 20px', borderRadius:'20px', border:'2px solid #c4b5a5', background:'white', cursor:'pointer'}}>Tryb Nauki</button>
+      </div>
+    </div>
   )
 }
 
