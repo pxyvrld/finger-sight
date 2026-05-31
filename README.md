@@ -1,41 +1,43 @@
 # FingerSight
 
-Aplikacja webowa do rozpoznawania **Polskiego Alfabetu Palcowego (PAP)** w czasie rzeczywistym z kamery. Dłoń wykrywa MediaPipe w przeglądarce, landmarki trafiają do backendu FastAPI z modelem RandomForest.
+A web application for real-time recognition of the **Polish Finger Alphabet (PAP)** using a camera. Hand detection runs in the browser via MediaPipe; landmarks are sent to a FastAPI backend with a RandomForest classifier.
+
+> Polski opis: [README_PL.md](README_PL.md)
 
 ---
 
-## Stos technologiczny
+## Tech Stack
 
-| Warstwa | Technologia |
+| Layer | Technology |
 |---|---|
 | Frontend | React 19 + Vite |
-| Detekcja dłoni | MediaPipe Tasks-Vision (HandLandmarker) |
+| Hand detection | MediaPipe Tasks-Vision (HandLandmarker) |
 | Backend | FastAPI + Uvicorn (Python 3.11+) |
-| Model ML | scikit-learn RandomForest |
-| Komunikacja | REST API (`POST /api/predict`) |
+| ML model | scikit-learn RandomForest |
+| Communication | REST API (`POST /api/predict`) |
 
 ---
 
-## Uruchomienie lokalne
+## Running locally
 
 ### 1. Backend
 
 ```bash
 cd backend
 
-# Utwórz środowisko wirtualne i zainstaluj zależności
+# Create virtual environment and install dependencies
 python -m venv venv
 venv\Scripts\activate          # Windows
 # source venv/bin/activate     # Linux / macOS
 
 pip install -r requirements.txt
 
-# Uruchom serwer
+# Start the server
 uvicorn app.main:app --reload
 ```
 
-API dostępne na `http://localhost:8000`  
-Dokumentacja (Swagger): `http://localhost:8000/docs`
+API available at `http://localhost:8000`  
+Swagger docs: `http://localhost:8000/docs`
 
 ### 2. Frontend
 
@@ -45,9 +47,9 @@ npm install
 npm run dev
 ```
 
-Aplikacja dostępna na `http://localhost:5173`
+App available at `http://localhost:5173`
 
-> **Ważne:** Backend musi działać przed uruchomieniem frontendu. Frontend ma fallback klasyfikator geometryczny (5 liter), ale pełne rozpoznawanie wymaga API.
+> **Important:** The backend must be running before starting the frontend. The frontend has a built-in geometric fallback classifier (5 letters), but full recognition requires the API.
 
 ---
 
@@ -59,89 +61,91 @@ POST /api/predict  → {"letter": "A", "confidence": 0.97}
 GET  /api/history  → {"history": ["A", "B", "M"]}
 ```
 
-**Request `/api/predict`:**
+**Request body for `/api/predict`:**
 ```json
 {
   "landmarks": [[x, y, z], ...]
 }
 ```
-21 punktów dłoni (x, y, z) z MediaPipe. Zwraca `{"letter": null, "confidence": 0.0}` gdy pewność < 0.6.
+21 hand points (x, y, z) from MediaPipe. Returns `{"letter": null, "confidence": 0.0}` when confidence is below 0.6.
 
 ---
 
-## Aktualny stan modelu
+## Current model state
 
-Model wytrenowany jest na **16 literach**: `A B C E I L M N O P R S T U W Y`
+The model is trained on **16 letters**: `A B C E I L M N O P R S T U W Y`
 
-Dane zebrane jedną ręką, przy jednym oświetleniu — model działa, ale ma ograniczoną dokładność w innych warunkach. Szczegóły treningu poniżej.
+Data was collected with one hand under one lighting condition — the model works, but accuracy drops under different conditions. See below for how to improve it.
 
 ---
 
-## Jak poprawić model
+## How to improve the model
 
-### Problem: skąd słaba accuracy?
+### Why is accuracy limited?
 
-Model osiągnął 100% na danych testowych, ale to dane z tej samej sesji — ta sama ręka, to samo oświetlenie, ten sam kąt. W praktyce accuracy spada bo:
+The model reached 100% on test data, but those samples came from the same session — same hand, same lighting, same angle. In practice accuracy drops because:
 
-- Inne oświetlenie → inne wartości landmarków
-- Inny kąt dłoni → inne proporcje
-- Inna ręka (inny użytkownik) → inne rozmiary
+- Different lighting → different landmark values
+- Different hand angle → different proportions
+- Different user's hand → different sizes
 
-### Co zrobić
+### What to do
 
-**1. Zbierz więcej próbek — z różnorodnych pozycji**
+**1. Collect more diverse samples**
 
 ```bash
 cd backend
 venv\Scripts\activate
 
-# Zbierz 200 próbek dla litery A z nowego kąta / oświetlenia
+# Collect 200 samples for letter A from a new angle / lighting
 python train/collect.py --letter A --samples 200 --camera 0
 
-# Collect.py przy pierwszym uruchomieniu pobierze model MediaPipe (~25 MB)
-# SPACJA = start/stop nagrywania, Q = zakończ
+# First run downloads the MediaPipe model (~25 MB)
+# SPACE = start/stop recording, Q = quit
 ```
 
-Rób każdą literę **minimum 3 razy**: raz normalnie, raz z dłonią wyżej, raz z boku. Różnorodność > ilość.
+Collect each letter **at least 3 times**: once normally, once with hand higher, once from the side. Diversity beats quantity.
 
-**2. Retrenuj model**
+**2. Retrain the model**
 
 ```bash
 python train/train.py
 ```
 
-**3. Sprawdź accuracy**
+**3. Check accuracy**
 
 ```bash
 python train/evaluate.py
-# Generuje classification_report + confusion_matrix.png
+# Generates a classification_report + confusion_matrix.png
 ```
 
-Celuj w **>90% accuracy**. Jeśli któraś litera ma recall < 0.8 — zbierz dla niej więcej próbek.
+Aim for **>90% accuracy**. If any letter has recall < 0.8 — collect more samples for it.
 
-**4. Dodaj brakujące litery statyczne**
+**4. Add missing static letters**
 
-Aplikacja aktualnie obsługuje tylko **litery statyczne PAP** — takie, które mają stały kształt dłoni bez ruchu. Litery z ogonkami (Ą, Ę, Ó, Ń, Ć, Ś, Ź, Ż, Ł) wymagają ruchu dłoni — rozpoznawanie sekwencji klatek nie jest jeszcze zaimplementowane.
+The app currently supports only **static PAP letters** — those with a fixed hand shape and no movement. Letters with diacritics (Ą, Ę, Ó, Ń, Ć, Ś, Ź, Ż, Ł) require hand motion — sequence-based recognition is not yet implemented.
+
+You can add missing static letters (e.g. `D F G H J K Z`):
 
 ```bash
 python train/collect.py --letter D --samples 300 --camera 0
 python train/collect.py --letter F --samples 300 --camera 0
-# ... itd.
+# ... etc.
 python train/train.py
 ```
 
-**5. Praktyczne wskazówki podczas zbierania danych**
+**5. Tips for collecting good data**
 
-- Jednolite tło (biała ściana) — MediaPipe działa lepiej
-- Dobre, równomierne oświetlenie — bez silnego podświetlenia z tyłu
-- Dłoń w odległości 30–60 cm od kamery
-- Zbieraj próbki od różnych osób jeśli możliwe
+- Plain background (white wall) — MediaPipe works better
+- Good, even lighting — avoid strong backlighting
+- Hand 30–60 cm from the camera
+- Collect samples from multiple people if possible
 
 ---
 
-## Zmienne środowiskowe
+## Environment variables
 
-Stwórz plik `backend/.env` (szablon w `backend/.env.example`):
+Create `backend/.env` (template in `backend/.env.example`):
 
 ```env
 MODEL_PATH=app/models/model.pkl
@@ -149,43 +153,43 @@ HISTORY_MAX_LENGTH=50
 CONFIDENCE_THRESHOLD=0.6
 ```
 
-`CONFIDENCE_THRESHOLD` — jeśli model zwraca za dużo `null`, obniż do `0.5`. Jeśli za dużo błędów — podnieś do `0.7`.
+`CONFIDENCE_THRESHOLD` — if the model returns too many `null` results, lower it to `0.5`. If too many wrong predictions — raise it to `0.7`.
 
 ---
 
-## Struktura projektu
+## Project structure
 
 ```
 finger-sight/
 ├── frontend/
 │   └── src/
-│       ├── App.jsx              # główny komponent UI
-│       ├── App.css              # style
-│       ├── classifier.js        # fallback klasyfikator geometryczny
+│       ├── App.jsx              # main UI component
+│       ├── App.css              # styles
+│       ├── classifier.js        # geometric fallback classifier
 │       ├── hooks/
-│       │   └── useHandDetector.js  # MediaPipe + komunikacja z API
+│       │   └── useHandDetector.js  # MediaPipe + API communication
 │       └── api/
 │           └── predict.js       # fetch wrapper
 ├── backend/
 │   ├── app/
 │   │   ├── main.py              # FastAPI endpoints
 │   │   ├── classifier.py        # HandClassifier (RandomForest)
-│   │   ├── normalizer.py        # normalizacja landmarków
-│   │   ├── config.py            # zmienne środowiskowe
+│   │   ├── normalizer.py        # landmark normalization
+│   │   ├── config.py            # environment variables
 │   │   └── models/
-│   │       └── model.pkl        # wytrenowany model (w repo)
-│   ├── data/                    # landmarks.csv (w .gitignore)
+│   │       └── model.pkl        # trained model (included in repo)
+│   ├── data/                    # landmarks.csv (in .gitignore)
 │   ├── train/
-│   │   ├── collect.py           # zbieranie danych z kamery
-│   │   ├── train.py             # trening modelu
-│   │   └── evaluate.py          # raport accuracy + confusion matrix
+│   │   ├── collect.py           # data collection from webcam
+│   │   ├── train.py             # model training
+│   │   └── evaluate.py          # accuracy report + confusion matrix
 │   └── requirements.txt
 └── README.md
 ```
 
 ---
 
-## Zespół
+## Team
 
 - **Frontend** — React, MediaPipe JS, UI/UX
-- **Backend/ML** — FastAPI, model RandomForest, zbieranie danych
+- **Backend/ML** — FastAPI, RandomForest model, data collection
